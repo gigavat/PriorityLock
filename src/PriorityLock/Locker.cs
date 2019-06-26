@@ -24,7 +24,6 @@ namespace PriorityLock
             }
             _mgr.RecursionCount = 0;
             _mgr.CurThread = null;
-            _mgr.IsSyncUse = false;
             if (_isHigh)
             {
                 _mgr.High.Release();

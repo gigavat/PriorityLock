@@ -110,7 +110,7 @@ namespace UsefulFeatures
                     {
                         await PrintInLockAsync(index, "HIGH ASYNC");
                     }
-                    await Task.Delay(1000);
+                    await Task.Delay(2000);
                 }
             }
             catch (Exception e)
@@ -170,7 +170,7 @@ namespace UsefulFeatures
                     {
                         PrintInLock(index, "HIGH");
                     }
-                    Thread.Sleep(1000);
+                    Thread.Sleep(2000);
                 }
             }
             catch (Exception e)

@@ -41,7 +41,6 @@ namespace PriorityLock
         internal int LowCount;
         internal Thread CurThread;
         internal int RecursionCount;
-        internal bool IsSyncUse;
 
         internal readonly SemaphoreSlim Low = new SemaphoreSlim(1);
         internal readonly SemaphoreSlim High = new SemaphoreSlim(1);
@@ -72,7 +71,7 @@ namespace PriorityLock
 
         private void Wait(bool high = false)
         {
-            if (CurThread == Thread.CurrentThread && IsSyncUse)
+            if (CurThread == Thread.CurrentThread)
             {
                 RecursionCount++;
                 return;
@@ -98,7 +97,6 @@ namespace PriorityLock
                 }
             }
             CurThread = Thread.CurrentThread;
-            IsSyncUse = true;
         }
 
         private async Task WaitAsync(bool high = false)
@@ -123,7 +121,6 @@ namespace PriorityLock
                     High.Release();
                 }
             }
-            CurThread = Thread.CurrentThread;
         }
     }
 }
