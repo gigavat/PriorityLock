@@ -2,7 +2,7 @@
 {
     public class HighLocker : Locker
     {
-        public HighLocker(LockMgr mgr) : base(mgr, true)
+        public HighLocker(LockMgr mgr) : base(mgr)
         { }
     }
 }

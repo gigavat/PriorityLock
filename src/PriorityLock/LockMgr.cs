@@ -39,24 +39,27 @@ namespace PriorityLock
     {
         internal int HighCount;
         internal int LowCount;
+
         internal Thread CurThread;
         internal int RecursionCount;
-        internal bool IsSyncUse;
 
-        internal readonly SemaphoreSlim Low = new SemaphoreSlim(1);
-        internal readonly SemaphoreSlim High = new SemaphoreSlim(1);
-        private SpinWait LowSpin = new SpinWait();
-        private SpinWait HighSpin = new SpinWait();
+        internal int HighLongCount;
+        internal int LowLongCount;
+
+        internal readonly SemaphoreSlim Low = new SemaphoreSlim(1, 1);
+        internal readonly SemaphoreSlim High = new SemaphoreSlim(1, 1);
+        internal readonly SemaphoreSlim LowLong = new SemaphoreSlim(0, 1);
+        internal readonly SemaphoreSlim HighLong = new SemaphoreSlim(0, 1);
 
         public Locker HighLock()
         {
             Wait(true);
             return new HighLocker(this);
         }
-        public Locker Lock(bool high = false)
+        public Locker Lock(bool isHigh = false)
         {
-            Wait(high);
-            return new Locker(this, high);
+            Wait(isHigh);
+            return isHigh ? new HighLocker(this) : new Locker(this);
         }
 
         public async Task<Locker> HighLockAsync()
@@ -64,29 +67,44 @@ namespace PriorityLock
             await WaitAsync(true);
             return new HighLocker(this);
         }
-        public async Task<Locker> LockAsync(bool high = false)
+        public async Task<Locker> LockAsync(bool isHigh = false)
         {
-            await WaitAsync(high);
-            return new Locker(this, high);
+            await WaitAsync(isHigh);
+            return isHigh ? new HighLocker(this) : new Locker(this);
         }
 
         private void Wait(bool high = false)
         {
-            if (CurThread == Thread.CurrentThread && IsSyncUse)
+            if (CurThread == Thread.CurrentThread)
             {
-                RecursionCount++;
+                Interlocked.Increment(ref RecursionCount);
                 return;
             }
+            var spin = new SpinWait();
             if (high)
             {
                 Interlocked.Increment(ref HighCount);
                 High.Wait();
-                while (Interlocked.CompareExchange(ref LowCount, 0, 0) != 0) HighSpin.SpinOnce();
+                while (Volatile.Read(ref LowCount) != 0)
+                    if (spin.NextSpinWillYield)
+                    {
+                        Interlocked.Increment(ref HighLongCount);
+                        HighLong.Wait();
+                    }
+                    else
+                        spin.SpinOnce();
             }
             else
             {
                 Low.Wait();
-                while (Interlocked.CompareExchange(ref HighCount, 0, 0) != 0) LowSpin.SpinOnce();
+                while (Volatile.Read(ref HighCount) != 0)
+                    if (spin.NextSpinWillYield)
+                    {
+                        Interlocked.Increment(ref LowLongCount);
+                        LowLong.Wait();
+                    }
+                    else
+                        spin.SpinOnce();
                 try
                 {
                     High.Wait();
@@ -98,21 +116,35 @@ namespace PriorityLock
                 }
             }
             CurThread = Thread.CurrentThread;
-            IsSyncUse = true;
         }
 
         private async Task WaitAsync(bool high = false)
         {
+            var spin = new SpinWait();
             if (high)
             {
                 Interlocked.Increment(ref HighCount);
                 await High.WaitAsync();
-                while (Interlocked.CompareExchange(ref LowCount, 0, 0) != 0) HighSpin.SpinOnce();
+                while (Volatile.Read(ref LowCount) != 0)
+                    if (spin.NextSpinWillYield)
+                    {
+                        Interlocked.Increment(ref HighLongCount);
+                        await HighLong.WaitAsync();
+                    }
+                    else
+                        spin.SpinOnce();
             }
             else
             {
                 await Low.WaitAsync();
-                while (Interlocked.CompareExchange(ref HighCount, 0, 0) != 0) LowSpin.SpinOnce();
+                while (Volatile.Read(ref HighCount) != 0)
+                    if (spin.NextSpinWillYield)
+                    {
+                        Interlocked.Increment(ref LowLongCount);
+                        await LowLong.WaitAsync();
+                    }
+                    else
+                        spin.SpinOnce();
                 try
                 {
                     await High.WaitAsync();
@@ -123,7 +155,39 @@ namespace PriorityLock
                     High.Release();
                 }
             }
-            CurThread = Thread.CurrentThread;
+        }
+
+        internal void Release(Locker locker)
+        {
+            if (RecursionCount > 0)
+            {
+                Interlocked.Decrement(ref RecursionCount);
+                return;
+            }
+            RecursionCount = 0;
+            CurThread = null;
+
+            if (locker is HighLocker)
+            {
+                High.Release();
+                Interlocked.Decrement(ref HighCount);
+            }
+            else
+            {
+                Low.Release();
+                Interlocked.Decrement(ref LowCount);
+            }
+
+            if (Volatile.Read(ref HighLongCount) > 0)
+            {
+                Interlocked.Decrement(ref HighLongCount);
+                HighLong.Release();
+            }
+            else if (Volatile.Read(ref LowLongCount) > 0)
+            {
+                Interlocked.Decrement(ref LowLongCount);
+                LowLong.Release();
+            }
         }
     }
 }
