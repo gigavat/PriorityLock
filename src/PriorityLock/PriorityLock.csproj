@@ -9,8 +9,8 @@
     <RepositoryType>git</RepositoryType>
     <PackageTags>priority;lock;async;await;synchronization</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <AssemblyVersion>1.0.2.0</AssemblyVersion>
-    <Version>1.0.2</Version>
+    <AssemblyVersion>1.0.3.0</AssemblyVersion>
+    <Version>1.0.3</Version>
   </PropertyGroup>
 
 </Project>

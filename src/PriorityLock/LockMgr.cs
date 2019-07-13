@@ -43,13 +43,8 @@ namespace PriorityLock
         internal Thread CurThread;
         internal int RecursionCount;
 
-        internal int HighLongCount;
-        internal int LowLongCount;
-
         internal readonly SemaphoreSlim Low = new SemaphoreSlim(1, 1);
         internal readonly SemaphoreSlim High = new SemaphoreSlim(1, 1);
-        internal readonly SemaphoreSlim LowLong = new SemaphoreSlim(0, 1);
-        internal readonly SemaphoreSlim HighLong = new SemaphoreSlim(0, 1);
 
         public Locker HighLock()
         {
@@ -85,26 +80,12 @@ namespace PriorityLock
             {
                 Interlocked.Increment(ref HighCount);
                 High.Wait();
-                while (Volatile.Read(ref LowCount) != 0)
-                    if (spin.NextSpinWillYield)
-                    {
-                        Interlocked.Increment(ref HighLongCount);
-                        HighLong.Wait();
-                    }
-                    else
-                        spin.SpinOnce();
+                while (Volatile.Read(ref LowCount) != 0) spin.SpinOnce();
             }
             else
             {
                 Low.Wait();
-                while (Volatile.Read(ref HighCount) != 0)
-                    if (spin.NextSpinWillYield)
-                    {
-                        Interlocked.Increment(ref LowLongCount);
-                        LowLong.Wait();
-                    }
-                    else
-                        spin.SpinOnce();
+                while (Volatile.Read(ref HighCount) != 0) spin.SpinOnce();
                 try
                 {
                     High.Wait();
@@ -125,26 +106,12 @@ namespace PriorityLock
             {
                 Interlocked.Increment(ref HighCount);
                 await High.WaitAsync();
-                while (Volatile.Read(ref LowCount) != 0)
-                    if (spin.NextSpinWillYield)
-                    {
-                        Interlocked.Increment(ref HighLongCount);
-                        await HighLong.WaitAsync();
-                    }
-                    else
-                        spin.SpinOnce();
+                while (Volatile.Read(ref LowCount) != 0) spin.SpinOnce();
             }
             else
             {
                 await Low.WaitAsync();
-                while (Volatile.Read(ref HighCount) != 0)
-                    if (spin.NextSpinWillYield)
-                    {
-                        Interlocked.Increment(ref LowLongCount);
-                        await LowLong.WaitAsync();
-                    }
-                    else
-                        spin.SpinOnce();
+                while (Volatile.Read(ref HighCount) != 0) spin.SpinOnce();
                 try
                 {
                     await High.WaitAsync();
@@ -176,17 +143,6 @@ namespace PriorityLock
             {
                 Low.Release();
                 Interlocked.Decrement(ref LowCount);
-            }
-
-            if (Volatile.Read(ref HighLongCount) > 0)
-            {
-                Interlocked.Decrement(ref HighLongCount);
-                HighLong.Release();
-            }
-            else if (Volatile.Read(ref LowLongCount) > 0)
-            {
-                Interlocked.Decrement(ref LowLongCount);
-                LowLong.Release();
             }
         }
     }
